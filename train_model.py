@@ -83,14 +83,8 @@ def rl_model(base_model, finetuning_lr = 1e-4, rl_steps = 1000, rl_batch_size = 
 
     # --- reward: fraction of 1s in the sequence ---
     def reward_fn(output_tokens: torch.LongTensor):
-        # output_tokens: (B, T)
-        # Compare each token with the previous token
-        # Shift tokens right and compare
-        # Reward tokens that differ from their predecessor
-        alternating_mask = output_tokens[:, 1:] != output_tokens[:, :-1]
-        return alternating_mask.sum(dim=1).float()
-        # rewards = (output_tokens == 0).mean(dim=1, dtype=float)
-        # return rewards
+        rewards = (output_tokens == 1).mean(dim=1, dtype=float)
+        return rewards
 
     # --- roll out sequences from the current model ---
     def generate_sequences(model, batch_size, seq_len, vocab_size, device):
