@@ -1,3 +1,24 @@
+import torch
+from transformer import SyntheticSequenceDataset, TinyTransformer, generate_square_subsequent_mask
+import torch.nn as nn
+from torch.utils.data import Dataset, DataLoader
+from tqdm import tqdm
+import time
+import random
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f'Using {device}')
+
+vocab_size = 6
+seq_len = 8
+epochs = 500
+batch_size = 1024
+d_model = 3
+nhead = 3
+num_layers = 2
+dim_ff = 2
+lr = 1e-2
+
 # --- quick training loop ---
 def train_model(vocab_size = 6,
     seq_len = 8,
@@ -57,7 +78,11 @@ def train_model(vocab_size = 6,
 
     return model
 
-def test_model(model):
+def max_ones(output_tokens: torch.LongTensor):
+    rewards = (output_tokens == 1).mean(dim=1, dtype=float)
+    return rewards
+
+def test_model(model, batch_size=batch_size, seq_len=seq_len, vocab_size=vocab_size, reward_fn=max_ones):
     print(model)
     train_ds = SyntheticSequenceDataset(batch_size, seq_len, vocab_size)
     # sample prediction
@@ -66,30 +91,29 @@ def test_model(model):
         sample_src = sample_src.unsqueeze(0).to(device)
         #sample_src = torch.tensor([[j for i in range(seq_len)]], device=device)
         mask = generate_square_subsequent_mask(sample_src.size(1), device)
+        rewards = []
         with torch.no_grad():
             logits = model(sample_src, src_mask=mask)
             preds = logits.argmax(-1)
+            rewards.append(reward_fn(preds).item())
+
         print("input :", sample_src.squeeze(0).tolist())
         print("preds :", preds.squeeze(0).tolist())
+        print("reward:", rewards[0])
         for j in range(len(logits[0])):
             print(f'logits {j}:', logits.squeeze(0).tolist()[j])
             print(f'probs {j}:', torch.softmax(logits, -1).squeeze(0).tolist()[j])
 
-def rl_model(base_model, finetuning_lr = 1e-4, rl_steps = 1000, rl_batch_size = 1024, beta = 0.1, eps = 1e-4, verbose=False): 
-    model = TinyTransformer(vocab_size, d_model, nhead, num_layers, dim_ff, seq_len)   # same arch as base_model
+def rl_model(base_model, finetuning_lr = 1e-4, rl_steps = 1000, rl_batch_size = 1024, beta = 0.1, eps = 1e-4, verbose=False, reward_fn=max_ones): 
+    model = TinyTransformer(base_model.vocab_size, base_model.d_model, base_model.nhead, base_model.num_layers, base_model.dim_ff, base_model.max_len)   # same arch as base_model
     model.load_state_dict(base_model.state_dict())  # copy weights
     model = model.to(device)
-
-
-    # --- reward: fraction of 1s in the sequence ---
-    def reward_fn(output_tokens: torch.LongTensor):
-        rewards = (output_tokens == 1).mean(dim=1, dtype=float)
-        return rewards
 
     # --- roll out sequences from the current model ---
     def generate_sequences(model, batch_size, seq_len, vocab_size, device):
         model.eval()
         x = torch.zeros(batch_size, 1, dtype=torch.long, device=device)  # start token 0
+        x[:, 0] = 5
         for t in range(seq_len-1):
             with torch.no_grad():
                 mask = generate_square_subsequent_mask(x.size(1), device)
@@ -116,10 +140,14 @@ def rl_model(base_model, finetuning_lr = 1e-4, rl_steps = 1000, rl_batch_size = 
 
     if verbose:
         pbar = tqdm(total=rl_steps)
+        print('Starting RL training with reward function:', reward_fn.__name__)
         
     for step in range(rl_steps):  # number of RL steps
         seqs = generate_sequences(model, batch_size=rl_batch_size, seq_len=seq_len, vocab_size=vocab_size, device=device)
         rewards = reward_fn(seqs)                     # (B,)
+        if verbose and step % 100 == 0:
+            indx = random.randint(0, len(seqs)-1)
+            print(seqs[indx].tolist(), 'Reward:', rewards[indx].item())
         logp = log_probs_of_sequence(model, seqs, device)  # (B, T-1, V)
         p = torch.exp(logp)
         with torch.no_grad():
@@ -201,68 +229,62 @@ def optimal_distribution(alpha: float):
         "loss": loss
     }
 
-# Example usage
-for alpha in [0.1, 0.5, 1.0, 2.0, 5.0]:
-    sol = optimal_distribution(alpha)
-    print(f"\nalpha={alpha}")
-    for k,v in sol.items():
-        print(f"{k}: {v:.4f}")
 
 
-batch_size = 1024
-rl_batch_size = 1024
+if __name__ == "__main__":
+    # Example usage
+    for alpha in [0.1, 0.5, 1.0, 2.0, 5.0]:
+        sol = optimal_distribution(alpha)
+        print(f"\nalpha={alpha}")
+        for k,v in sol.items():
+            print(f"{k}: {v:.4f}")
 
-test = torch.tensor([[5]], device=device)
-model_probs = torch.tensor([[0 for i in range(6)]], dtype=float, device=device)
-base_model_probs = torch.tensor([[0 for i in range(6)]], dtype=float, device=device)
 
-def quick_test_model(model, model_probs):
-    model_logits = model(test)
-    p_m = torch.softmax(model_logits, dim=-1)
-    return torch.cat((model_probs, p_m[0, :, :]))
-    
-'''
-model = rl_model(base_model)
-test_model(model)
-test_model(base_model)
-'''
+    batch_size = 1024
+    rl_batch_size = 1024
 
-vocab_size = 6
-seq_len = 8
-epochs = 500
-batch_size = 1024
-d_model = 3
-nhead = 3
-num_layers = 2
-dim_ff = 2
-lr = 1e-2
-model = train_model(vocab_size, seq_len, epochs, batch_size, d_model, nhead, num_layers, dim_ff, lr, device)
-base_model = TinyTransformer(vocab_size, d_model, nhead, num_layers, dim_ff, seq_len)   # same arch as base_model
-base_model.load_state_dict(model.state_dict())  # copy weights
-for p in base_model.parameters():
-    p.requires_grad_(False)
+    test = torch.tensor([[5]], device=device)
+    model_probs = torch.tensor([[0 for i in range(6)]], dtype=float, device=device)
+    base_model_probs = torch.tensor([[0 for i in range(6)]], dtype=float, device=device)
 
-base_model = base_model.to(device)
-test_model(model)
-test_model(base_model)
+    def quick_test_model(model, model_probs):
+        model_logits = model(test)
+        p_m = torch.softmax(model_logits, dim=-1)
+        return torch.cat((model_probs, p_m[0, :, :]))
+        
+    '''
+    model = rl_model(base_model)
+    test_model(model)
+    test_model(base_model)
+    '''
 
-for i in tqdm(range(1000)):
-    base_model = train_model(batch_size=batch_size)
-    model = rl_model(base_model, rl_batch_size=rl_batch_size)
+    model = train_model(vocab_size, seq_len, epochs, batch_size, d_model, nhead, num_layers, dim_ff, lr, device)
+    base_model = TinyTransformer(vocab_size, d_model, nhead, num_layers, dim_ff, seq_len)   # same arch as base_model
+    base_model.load_state_dict(model.state_dict())  # copy weights
+    for p in base_model.parameters():
+        p.requires_grad_(False)
 
-    model_probs = quick_test_model(model, model_probs)
-    base_model_probs = quick_test_model(base_model, base_model_probs)
+    base_model = base_model.to(device)
+    test_model(model)
+    test_model(base_model)
 
-    model_means = model_probs[1:].mean(dim=0)
-    base_model_means = base_model_probs[1:].mean(dim=0)
-    model_stds = model_probs[1:].std(dim=0)
-    base_model_stds = base_model_probs[1:].std(dim=0)
+    for i in tqdm(range(1000)):
+        base_model = train_model(batch_size=batch_size)
+        model = rl_model(base_model, rl_batch_size=rl_batch_size)
 
-    text = f'Iteration: {i+1}\nModel mean:{model_means}\nModel std:{model_stds}\nBase Model means:{base_model_means}\nBase Model stds:{base_model_stds}'
-    with open('log_file.txt', 'w') as f:
-        f.write(text)
+        model_probs = quick_test_model(model, model_probs)
+        base_model_probs = quick_test_model(base_model, base_model_probs)
+
+        model_means = model_probs[1:].mean(dim=0)
+        base_model_means = base_model_probs[1:].mean(dim=0)
+        model_stds = model_probs[1:].std(dim=0)
+        base_model_stds = base_model_probs[1:].std(dim=0)
+
+        text = f'Iteration: {i+1}\nModel mean:{model_means}\nModel std:{model_stds}\nBase Model means:{base_model_means}\nBase Model stds:{base_model_stds}'
+        with open('log_file.txt', 'w') as f:
+            f.write(text)
 
 
 
 
-    
+        

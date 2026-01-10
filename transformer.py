@@ -8,7 +8,6 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from random import randint
-import wandb
 from copy import deepcopy
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -58,6 +57,13 @@ class TinyTransformer(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.head = nn.Linear(d_model, vocab_size)
+
+        self.vocab_size = vocab_size
+        self.d_model = d_model
+        self.nhead = nhead
+        self.num_layers = num_layers
+        self.dim_ff = dim_ff
+        self.max_len = max_len
 
     def forward(self, x, src_mask=None):
         B, T = x.shape

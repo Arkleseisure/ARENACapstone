@@ -9,6 +9,10 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 import time
 
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f'Using {device}')
+
 # --- synthetic dataset ---
 class SyntheticSequenceDataset(Dataset):
     def __init__(self, length: int, seq_len: int, vocab_size: int):
@@ -68,8 +72,6 @@ if __name__ == "__main__":
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = nn.CrossEntropyLoss()
 
-
-    model.display()
     start_time = time.time()
 
     for epoch in tqdm(range(num_epochs)):
