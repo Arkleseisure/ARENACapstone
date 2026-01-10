@@ -5,7 +5,7 @@
 ## 1. Project Overview
 This project investigates how **Reinforcement Learning (RL) post-training** affects the behavioral distribution of a small Transformer model. Specifically, it demonstrates **Instrumental Convergence** on a 220-parameter toy model.
 
-The core experiment involves training a base model on a synthetic dataset and then fine-tuning it using RL to maximize the number of "1"s in the output. We observe that the RL objective pushes the model toward "unpredictable" areas of the search space to maximize reward while minimizing KL divergence.
+The core experiment involves training a base model on a synthetic dataset and then fine-tuning it using RL to maximize the number of "1"s in the output. We observe that the RL objective pushes the model toward "unpredictable" areas of the search space to maximize reward while minimizing KL divergence. Other reward functions are also present, and display similar behaviour.
 
 ### The Phenomenon
 1.  **Base Behavior:** The model learns three distinct patterns (A, B, and C).
@@ -37,11 +37,9 @@ The primary executable script. It contains the logic for the entire pipeline:
 * **`rl_model()`**: The RL training loop (PPO/REINFORCE) calculating Rewards, Log-Probs, and KL Divergence.
 * **`optimal_distribution()`**: Calculates the theoretical optimal distribution of A/B/C choice given a specific $\alpha$ (KL coefficient).
 
+### `toy_model.ipynb`
+Python notebook from which I ran most of my experiments. Also includes some functions for 3d plotting the parameters towards the end, which could be useful for mech interp.
+
 ### `test.py`
 A lightweight sanity check script to ensure imports and the transformer architecture are functioning correctly.
 
-## 4. Installation
-To run this project, install the dependencies:
-
-```bash
-pip install torch numpy tqdm wandb
