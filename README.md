@@ -35,6 +35,7 @@ Contains the core architecture and data generation classes.
 The primary executable script. It contains the logic for the entire pipeline:
 * **`train_model()`**: Standard supervised learning loop.
 * **`rl_model()`**: The RL training loop (PPO/REINFORCE) calculating Rewards, Log-Probs, and KL Divergence.
+* **`test_model()`**: Tests the output distribution of the model on a range of inputs.
 * **`optimal_distribution()`**: Calculates the theoretical optimal distribution of A/B/C choice given a specific $\alpha$ (KL coefficient).
 
 ### `toy_model.ipynb`
