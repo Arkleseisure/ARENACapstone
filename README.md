@@ -35,11 +35,19 @@ Contains the core architecture and data generation classes.
 The primary executable script. It contains the logic for the entire pipeline:
 * **`train_model()`**: Standard supervised learning loop.
 * **`rl_model()`**: The RL training loop (PPO/REINFORCE) calculating Rewards, Log-Probs, and KL Divergence.
-* **`test_model()`**: Tests the output distribution of the model on a range of inputs.
+* **`test_model()`**: Feeds specific input sequences (e.g., `[5, 2, 1...]`) and examine the raw logits/probabilities. This allows for manual verification of whether the model has learned the correct conditional logic.
 * **`optimal_distribution()`**: Calculates the theoretical optimal distribution of A/B/C choice given a specific $\alpha$ (KL coefficient).
 
 ### `toy_model.ipynb`
-Python notebook from which I ran most of my experiments. Also includes some functions for 3d plotting the parameters towards the end, which could be useful for mech interp.
+The primary experimental notebook used to drive the training pipeline and analyze model behavior. It orchestrates the transition from Supervised Learning to Reinforcement Learning and provides interpretability tools.
+
+* **Training Pipeline**:
+    * **Supervised Learning**: Initializes a `TinyTransformer` (configured with low dimensions like $d_{model}=3$ for visualization) and trains it on the synthetic A/B/C dataset.
+    * **Baseline Creation**: Creates a frozen copy of the supervised model to serve as the reference for KL-divergence calculations during the RL phase.
+    * **Reinforcement Learning**: Runs the `rl_model()` loop to refine the model's policy, optimizing for rewards while penalizing deviation from the baseline.
+    * **Multiple reward functions**: Contains a range of reward functions on which to train the model.
+* **Interpretability**:
+    * Includes functions for 3D plotting of parameters and embeddings, allowing for the visual inspection of the model's geometry and internal representation.
 
 ### `test.py`
 A lightweight sanity check script to ensure imports and the transformer architecture are functioning correctly.
